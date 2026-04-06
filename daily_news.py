@@ -10,27 +10,77 @@ CHAT_ID = os.getenv("CHAT_ID")
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
+
+def get_k8s_news():
+    return get_news(
+        "kubernetes CNCF kubernetes release kubernetes security"
+    )
+
+
+def get_stock_news():
+    return get_news(
+        "Indian stock market NSE BSE Nifty Sensex stocks",
+        country="in"
+    )
+
+
 # -------- FETCH NEWS --------
-def get_news(query):
+def get_news(query, country=None):
     url = f"https://newsdata.io/api/1/news?apikey={NEWS_API_KEY}&q={query}&language=en"
+
+    if country:
+        url += f"&country={country}"
+
     res = requests.get(url).json()
     articles = res.get("results", [])[:10]
 
-    return "\n".join([f"- {a['title']}" for a in articles])
+    news_list = []
+    for a in articles:
+        title = a.get("title", "No title").replace("(", "").replace(")", "")
+        link = a.get("link", "")
+        news_list.append(f"- [{title}]({link})")
+
+    return "\n".join(news_list)
 
 
 # -------- CHATGPT PROCESSING --------
 def summarize(k8s_news, stock_news):
     prompt = f"""
-You are a smart daily news assistant.
+You are a highly selective expert news analyst.
 
-1. Summarize Kubernetes/Tech news (top 10)
-2. Summarize Indian stock market news
-3. Suggest:
-   - 2–3 stocks to watch or buy
-   - Overall sentiment (Bullish/Bearish/Neutral)
+STRICT FILTERING RULES:
 
-Make it SHORT and Telegram friendly.
+1. Kubernetes Section:
+- ONLY include:
+  - Kubernetes official releases
+  - CNCF ecosystem updates
+  - Security updates
+- EXCLUDE:
+  - Cloud provider news (AWS, Azure, GCP unless directly Kubernetes core)
+
+2. Indian Stock Market:
+- ONLY India-related news
+- Focus on:
+  - Nifty / Sensex movement
+  - Major sector trends
+  - High-impact company updates
+
+OUTPUT FORMAT (Telegram friendly, concise):
+
+🚀 Kubernetes (Top 3-5)
+- Keep only HIGH SIGNAL news with links
+
+📈 Indian Stock Market
+- Market Summary (2 lines max)
+- Sentiment: Bullish / Bearish / Neutral
+- Stocks to Watch (2-3 with 1-line reasoning)
+
+IMPORTANT:
+- Keep links clickable
+- Remove noise
+- Be concise
+
+DATA:
 
 Kubernetes News:
 {k8s_news}
@@ -57,8 +107,8 @@ def send_telegram(message):
 
 
 # -------- MAIN --------
-k8s_news = get_news("kubernetes OR cloud OR devops")
-stock_news = get_news("Indian stock market OR NSE OR BSE")
+k8s_news = get_k8s_news()
+stock_news = get_stock_news()
 
 final_msg = summarize(k8s_news, stock_news)
 send_telegram(final_msg)
