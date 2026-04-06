@@ -1,0 +1,25 @@
+name: Daily News Bot
+
+on:
+  schedule:
+    - cron: "0 6 * * *"   # 8 AM Germany time (UTC+2 adjust if needed)
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run script
+        run: python news_bot.py
