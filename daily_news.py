@@ -32,17 +32,29 @@ def get_news(query: str, country: str = None, size: int = 15) -> list[dict]:
         print(f"[ERROR] News fetch failed for query '{query}': {e}")
         return []
 
+    # Log API-level errors (e.g. rate limit, bad key, invalid query param)
+    if res.get("status") != "success":
+        print(f"[WARN] API error for query '{query}': {res.get('results') or res}")
+        return []
+
     articles = res.get("results", [])
-    return [
-        {
-            "title": a.get("title", "No title").replace("(", "").replace(")", ""),
-            "link":  a.get("link", ""),
+    parsed = []
+    for a in articles:
+        # Guard: skip anything that isn't a dict (API sometimes returns strings on error)
+        if not isinstance(a, dict):
+            print(f"[WARN] Unexpected article format (skipping): {a!r}")
+            continue
+        title = a.get("title") or ""
+        link  = a.get("link")  or ""
+        if not title or not link:
+            continue
+        parsed.append({
+            "title":       title.replace("(", "").replace(")", ""),
+            "link":        link,
             "description": a.get("description") or "",
-            "pubDate": a.get("pubDate") or "",
-        }
-        for a in articles
-        if a.get("title") and a.get("link")
-    ]
+            "pubDate":     a.get("pubDate")      or "",
+        })
+    return parsed
 
 
 def format_articles(articles: list[dict]) -> str:
@@ -81,9 +93,18 @@ def get_k8s_news() -> str:
 
 
 def get_stock_news() -> str:
-    query = '"Nifty" OR "Sensex" OR "NSE" OR "BSE" (stocks OR market OR rally OR crash OR earnings)'
-    articles = get_news(query, country="in", size=12)
-    return format_articles(articles)
+    # newsdata.io doesn't handle complex OR chains with quoted phrases reliably.
+    # Two simple queries merged gives better results than one complex query.
+    articles1 = get_news("Nifty Sensex Indian stock market", country="in", size=8)
+    articles2 = get_news("NSE BSE India stocks earnings", country="in", size=6)
+
+    seen, merged = set(), []
+    for a in articles1 + articles2:
+        if a["link"] not in seen:
+            seen.add(a["link"])
+            merged.append(a)
+
+    return format_articles(merged[:12])
 
 
 # -------- GPT PROCESSING --------
